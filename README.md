@@ -22,10 +22,10 @@ This repository contains the simulation model, datasets, analysis scripts, and m
 | Metric | Value |
 |--------|-------|
 | **Operability Index (OI)** | 14.1% (281/2,000 feasible) |
-| **Dominant bottleneck** | Reid Vapour Pressure ≤ 76 kPa (48.5% individual satisfaction) |
+| **Dominant bottleneck** | Reid Vapor Pressure ≤ 76 kPa (48.5% individual satisfaction) |
 | **Critical coupling** | GVC5 vs. PVR inverse correlation (*r* = −0.65) |
 | **Revenue driver** | Cold separator temperature (*r* = 0.984 with Sales Price) |
-| **Best feasible revenue** | 619.89 $/h |
+| **Best feasible revenue** | 663.85 $/h |
 
 ---
 
