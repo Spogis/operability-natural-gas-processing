@@ -103,8 +103,6 @@ print(f"\nDataset loaded: {N} LHS samples, {df.shape[1]} columns")
 #   - 6 real stage temperatures (top + bottom of T-01, T-02, T-03)
 #
 # We use the REAL BOTTOM TEMPERATURES as the decision variables
-# for the paper (as per Roymel's correction), because these are
-# the operationally meaningful manipulated variables.
 
 df = df.rename(columns={
     # Real stage temperatures → paper decision variables
@@ -711,7 +709,6 @@ print("  ✓ Figure 8 – LPG_C5 × NG_RVP trade-off (full)")
 
 # ──────────────────────────────────────────────────────────────
 # FIG 8b – ZOOM: feasible region only, revenue colour scale
-#           (Roymel suggestion: comment #6)
 # ──────────────────────────────────────────────────────────────
 fig, ax = plt.subplots(figsize=(6, 4.5))
 sc = ax.scatter(df.loc[feas_all, "LPG_C5"], df.loc[feas_all, "NG_RVP"],
@@ -744,7 +741,7 @@ plt.tight_layout()
 plt.savefig(f"{FIGDIR}/fig8b_feasible_zoom.png")
 plt.savefig(f"{FIGDIR}/fig8b_feasible_zoom.pdf")
 plt.close()
-print("  ✓ Figure 8b – Feasible region zoom: LPG_C5 × NG_RVP (Roymel #6)")
+print("  ✓ Figure 8b – Feasible region zoom: LPG_C5 × NG_RVP")
 
 
 # ──────────────────────────────────────────────────────────────
@@ -789,7 +786,6 @@ print("  ✓ Figure 8c – Feasible region zoom: LPG_C2 × NG_RVP (active constr
 
 # ──────────────────────────────────────────────────────────────
 # FIG 9 – Key correlation scatter plots (2×2)
-#          (Roymel suggestion: comment #2)
 # ──────────────────────────────────────────────────────────────
 fig, axes = plt.subplots(2, 2, figsize=(10, 8))
 
@@ -816,8 +812,6 @@ for idx, (xvar, yvar, xlabel, ylabel) in enumerate(scatter_pairs):
     # Regression line
     r_val, p_val = stats.pearsonr(df[xvar], df[yvar])
     z = np.polyfit(df[xvar], df[yvar], 1)
-    x_line = np.linspace(df[xvar].min(), df[xvar].max(), 100)
-    ax.plot(x_line, np.polyval(z, x_line), "k--", lw=1, alpha=0.6)
 
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
@@ -840,7 +834,7 @@ plt.tight_layout()
 plt.savefig(f"{FIGDIR}/fig9_key_correlations.png")
 plt.savefig(f"{FIGDIR}/fig9_key_correlations.pdf")
 plt.close()
-print("  ✓ Figure 9 – Key correlation scatter plots (Roymel #2)")
+print("  ✓ Figure 9 – Key correlation scatter plots")
 
 
 # ──────────────────────────────────────────────────────────────
