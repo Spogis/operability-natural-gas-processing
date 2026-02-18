@@ -17,22 +17,23 @@ Framework:
     DOS  – Desired Output Set    (defined by product-quality constraints)
     OI   – Operability Index = |AOS ∩ DOS| / |AOS| × 100 %
 
-Decision variables (AIS):
-    u1 = V_123102_Temp        (°C)   – separator temperature
-    u2 = T_123701_Reboiler    (°C)   – deethaniser reboiler
-    u3 = T_123702_Condenser   (°C)   – depropaniser condenser
-    u4 = T_123702_Reboiler    (°C)   – depropaniser reboiler
-    u5 = T_123703_Reboiler    (°C)   – debutaniser reboiler
+Decision variables (AIS) – using real stage temperatures:
+    u1 = V_02_Temp    (°C)  – cold separator temperature  (V-02)
+    u2 = T_01_Reb     (°C)  – deethaniser reboiler temp.  (T-01, stage 11)
+    u3 = T_02_RR      (–)   – debutanizer reflux ratio    (T-02)
+    u4 = T_02_Reb     (°C)  – debutanizer reboiler temp.  (T-02, stage 21)
+    u5 = T_03_Reb     (°C)  – stabilizer reboiler temp.   (T-03, stage 6)
 
 Outputs / Constraints (DOS):
-    y1 = Sales_Price           ($/h)  – objective (maximise real price)
-    g1 = GVC1      ≥ 80               – C1 spec (always satisfied)
-    g2 = GVC2      ≤ 12               – C2 spec
-    g3 = GVC5      ≤  2               – C5+ spec
-    g4 = GVC5_PVR  ≤ 76               – Reid vapour pressure spec
+    y1 = Revenue       ($/h)  – objective (maximise)
+    g1 = SG_C1    ≥ 80        – methane in Sales Gas (mol%)
+    g2 = LPG_C2   ≤ 12        – ethane in LPG (mol%)
+    g3 = LPG_C5   ≤  2        – C5+ in LPG (mol%)
+    g4 = NG_RVP   ≤ 76        – Reid Vapour Pressure of Natural Gasoline (kPa)
 
-Author : Nicolas Spogis – UNICAMP/FEQ
-Date   : 2026
+Authors : Gabriel Freitas, Roymel R. Carpio, Nicolas Spogis
+          UFRJ / UNICAMP
+Date    : 2026
 """
 
 # ============================================================
@@ -44,10 +45,11 @@ import matplotlib
 matplotlib.use("Agg")  # non-interactive backend
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
-from matplotlib.patches import FancyBboxPatch
+from matplotlib.patches import FancyBboxPatch, Rectangle
 from matplotlib.lines import Line2D
 import seaborn as sns
 from itertools import combinations
+import scipy.stats as stats
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -84,7 +86,7 @@ C_OBJ    = "#1f77b4"   # blue   – objective
 C_ACCENT = "#ff7f0e"   # orange – highlights
 
 # ============================================================
-# 1.  Load data
+# 1.  Load data and rename columns
 # ============================================================
 print("=" * 70)
 print("OPERABILITY ANALYSIS – Natural Gas Processing Plant")
@@ -94,32 +96,83 @@ df = pd.read_csv("../datasets/dataset_clean.csv")
 N = len(df)
 print(f"\nDataset loaded: {N} LHS samples, {df.shape[1]} columns")
 
+# ── Rename to paper nomenclature ─────────────────────────────
+# The dataset contains:
+#   - 5 original DWSIM decision vars (recovery fractions / reflux ratio)
+#   - 5 outputs
+#   - 6 real stage temperatures (top + bottom of T-01, T-02, T-03)
+#
+# We use the REAL BOTTOM TEMPERATURES as the decision variables
+# for the paper (as per Roymel's correction), because these are
+# the operationally meaningful manipulated variables.
+
+df = df.rename(columns={
+    # Real stage temperatures → paper decision variables
+    "T_123701_Stage11_Temperature": "T_01_Reb",   # Deethaniser bottom (11 stages)
+    "T_123702_Stage21_Temperature": "T_02_Reb",   # Debutanizer bottom (21 stages)
+    "T_123703_Stage6_Temperature":  "T_03_Reb",   # Stabilizer bottom  (6 stages)
+    # Cold separator stays the same (already a temperature)
+    "V_123102_Temp": "V_02_Temp",
+    # Reflux ratio (NOT a temperature — dimensionless)
+    "T_123702_Condenser": "T_02_RR",
+    # Top temperatures (kept for reference, not used as DVs)
+    "T_123701_Stage1_Temperature": "T_01_Top",
+    "T_123702_Stage1_Temperature": "T_02_Top",
+    "T_123703_Stage1_Temperature": "T_03_Top",
+    # Outputs → paper names
+    "GVC1":     "SG_C1",
+    "GVC2":     "LPG_C2",
+    "GVC5":     "LPG_C5",
+    "GVC5_PVR": "NG_RVP",
+})
+
+# Revenue: stored as negative cost in Sales_Price → convert to positive
+df["Revenue"] = df["Sales_Price"].abs()
+
 # ── Column mapping ───────────────────────────────────────────
+# Decision variables for the paper (real temperatures + reflux ratio)
 decision_vars = [
-    "V_123102_Temp",
-    "T_123701_Reboiler",
-    "T_123702_Condenser",
-    "T_123702_Reboiler",
-    "T_123703_Reboiler",
+    "V_02_Temp",   # u1: cold separator temperature (°C)
+    "T_01_Reb",    # u2: deethaniser reboiler temperature (°C)
+    "T_02_RR",     # u3: debutanizer reflux ratio (–)
+    "T_02_Reb",    # u4: debutanizer reboiler temperature (°C)
+    "T_03_Reb",    # u5: stabilizer reboiler temperature (°C)
 ]
 dv_labels = [
-    r"$T_{\mathrm{V-123102}}$ (°C)",
-    r"$T_{\mathrm{reb,123701}}$ (°C)",
-    r"$T_{\mathrm{cond,123702}}$ (°C)",
-    r"$T_{\mathrm{reb,123702}}$ (°C)",
-    r"$T_{\mathrm{reb,123703}}$ (°C)",
+    r"$u_1$: $T_{\mathrm{V\text{-}02}}$ (°C)",
+    r"$u_2$: $T_{\mathrm{reb,T\text{-}01}}$ (°C)",
+    r"$u_3$: RR$_{\mathrm{T\text{-}02}}$ (–)",
+    r"$u_4$: $T_{\mathrm{reb,T\text{-}02}}$ (°C)",
+    r"$u_5$: $T_{\mathrm{reb,T\text{-}03}}$ (°C)",
 ]
-dv_short = ["V-123102", "Reb-123701", "Cond-123702", "Reb-123702", "Reb-123703"]
+dv_short = ["V-02 Temp", "T-01 Reb", "T-02 RR", "T-02 Reb", "T-03 Reb"]
+dv_units = ["°C", "°C", "–", "°C", "°C"]
 
-obj_col = "Sales_Price"
+obj_col = "Revenue"
 
-constraint_cols = ["GVC1", "GVC2", "GVC5", "GVC5_PVR"]
+constraint_cols = ["SG_C1", "LPG_C2", "LPG_C5", "NG_RVP"]
 constraint_specs = {
-    "GVC1":     {"lb": 80.0, "ub": np.inf,  "label": r"$g_1$: GVC1 $\geq$ 80"},
-    "GVC2":     {"lb":  0.0, "ub": 12.0,    "label": r"$g_2$: GVC2 $\leq$ 12"},
-    "GVC5":     {"lb":  0.0, "ub":  2.0,    "label": r"$g_3$: GVC5 $\leq$ 2"},
-    "GVC5_PVR": {"lb":  0.0, "ub": 76.0,    "label": r"$g_4$: PVR $\leq$ 76"},
+    "SG_C1":  {"lb": 80.0, "ub": np.inf, "label": r"$g_1$: SG\_C$_1$ $\geq$ 80"},
+    "LPG_C2": {"lb":  0.0, "ub": 12.0,   "label": r"$g_2$: LPG\_C$_2$ $\leq$ 12"},
+    "LPG_C5": {"lb":  0.0, "ub":  2.0,   "label": r"$g_3$: LPG\_C$_5$ $\leq$ 2"},
+    "NG_RVP": {"lb":  0.0, "ub": 76.0,   "label": r"$g_4$: NG\_RVP $\leq$ 76"},
 }
+active_constraints = ["LPG_C2", "LPG_C5", "NG_RVP"]
+
+# ── SLSQP optimal point (real temperatures from simulation) ──
+optimal = {
+    "V_02_Temp": -33.00,
+    "T_01_Reb":   66.29,
+    "T_02_RR":     4.31,
+    "T_02_Reb":  140.11,
+    "T_03_Reb":  197.24,
+    "Revenue":   663.85,
+    "SG_C1":      83.74,
+    "LPG_C2":     12.00,
+    "LPG_C5":      0.01,
+    "NG_RVP":     76.00,
+}
+
 
 # ============================================================
 # 2.  Feasibility assessment
@@ -127,6 +180,17 @@ constraint_specs = {
 print("\n" + "─" * 70)
 print("SECTION 1 – FEASIBILITY ASSESSMENT")
 print("─" * 70)
+
+# Helper function
+def count_feasible(df, specs):
+    """Count feasible points under given constraint specs."""
+    mask = pd.Series(True, index=df.index)
+    for col, s in specs.items():
+        if np.isfinite(s["lb"]):
+            mask &= df[col] >= s["lb"]
+        if np.isfinite(s["ub"]):
+            mask &= df[col] <= s["ub"]
+    return mask.sum(), mask
 
 # Per-constraint masks
 masks = {}
@@ -162,7 +226,6 @@ print(f"    ({n_feas} of {N} AIS samples map into the DOS)")
 # Pairwise feasibility
 print(f"\n{'Constraint Pair':<25} {'Joint Feas %':>12}")
 print("-" * 39)
-active_constraints = ["GVC2", "GVC5", "GVC5_PVR"]
 for c1, c2 in combinations(active_constraints, 2):
     joint = masks[c1] & masks[c2]
     print(f"{c1 + ' ∩ ' + c2:<25} {100*joint.sum()/N:>11.1f}%")
@@ -174,44 +237,44 @@ print("\n" + "─" * 70)
 print("SECTION 2 – AIS / AOS CHARACTERISATION")
 print("─" * 70)
 
-print(f"\n{'Variable':<22} {'Min':>10} {'Max':>10} {'Range':>10}")
+print(f"\n{'Variable':<14} {'Min':>10} {'Max':>10} {'Range':>10} {'Unit':>6}")
 print("-" * 55)
 print("--- Available Input Set (AIS) ---")
-for v in decision_vars:
+for v, u in zip(decision_vars, dv_units):
     lo, hi = df[v].min(), df[v].max()
-    print(f"{v:<22} {lo:>10.2f} {hi:>10.2f} {hi-lo:>10.2f}")
+    print(f"{v:<14} {lo:>10.2f} {hi:>10.2f} {hi-lo:>10.2f} {u:>6}")
 print("\n--- Achievable Output Set (AOS) ---")
 for v in [obj_col] + constraint_cols:
     lo, hi = df[v].min(), df[v].max()
-    print(f"{v:<22} {lo:>10.4f} {hi:>10.4f} {hi-lo:>10.4f}")
+    print(f"{v:<14} {lo:>10.4f} {hi:>10.4f} {hi-lo:>10.4f}")
 
 # Feasible vs infeasible DV comparison
-print(f"\n{'Variable':<22} {'μ_feas':>9} {'μ_infeas':>10} {'Shift':>9}")
-print("-" * 54)
+print(f"\n{'Variable':<14} {'μ_feas':>9} {'μ_infeas':>10} {'Shift':>9}")
+print("-" * 46)
 for v in decision_vars:
     mf = df.loc[feas_all, v].mean()
     mi = df.loc[~feas_all, v].mean()
-    print(f"{v:<22} {mf:>9.2f} {mi:>10.2f} {mf-mi:>+9.2f}")
+    print(f"{v:<14} {mf:>9.2f} {mi:>10.2f} {mf-mi:>+9.2f}")
 
 # ============================================================
-# 4.  Correlation analysis
+# 4.  Correlation analysis (using real temperatures)
 # ============================================================
 print("\n" + "─" * 70)
-print("SECTION 3 – CORRELATION ANALYSIS")
+print("SECTION 3 – CORRELATION ANALYSIS (real temperatures)")
 print("─" * 70)
 
-print(f"\n--- Decision Vars × Sales_Price ---")
+print(f"\n--- Decision Vars × Revenue ---")
 for v in decision_vars:
     r = df[v].corr(df[obj_col])
     stars = "***" if abs(r) > 0.5 else "**" if abs(r) > 0.3 else "*" if abs(r) > 0.1 else ""
-    print(f"  {v:<22} r = {r:>+.4f}  {stars}")
+    print(f"  {v:<14} r = {r:>+.4f}  {stars}")
 
 print(f"\n--- Decision Vars × Active Constraints ---")
-header = f"{'DV':<22}" + "".join(f"{c:>12}" for c in active_constraints)
+header = f"{'DV':<14}" + "".join(f"{c:>12}" for c in active_constraints)
 print(header)
 print("-" * len(header))
 for v in decision_vars:
-    row = f"{v:<22}"
+    row = f"{v:<14}"
     for c in active_constraints:
         r = df[v].corr(df[c])
         flag = " *" if abs(r) > 0.3 else ""
@@ -224,6 +287,18 @@ for c1, c2 in combinations(constraint_cols, 2):
     if abs(r) > 0.2:
         print(f"  {c1} × {c2}: r = {r:>+.4f}")
 
+# Key correlations for the paper
+print(f"\n--- Key Correlations (Table 5) ---")
+key_pairs = [
+    ("V_02_Temp", "Revenue",  "Colder separator → more liquid → higher revenue"),
+    ("T_01_Reb",  "LPG_C2",  "Hotter T-01 reboiler → less ethane in LPG"),
+    ("T_02_Reb",  "NG_RVP",  "Hotter T-02 reboiler → lower RVP of NG"),
+    ("LPG_C5",   "NG_RVP",   "More C5+ in LPG → less light ends in NG → lower RVP"),
+]
+for x, y, mechanism in key_pairs:
+    r, p = stats.pearsonr(df[x], df[y])
+    print(f"  r({x}, {y}) = {r:+.4f}  (p={p:.2e})  — {mechanism}")
+
 # ============================================================
 # 5.  Constraint sensitivity / relaxation analysis
 # ============================================================
@@ -231,34 +306,24 @@ print("\n" + "─" * 70)
 print("SECTION 4 – CONSTRAINT SENSITIVITY ANALYSIS")
 print("─" * 70)
 
-
-def count_feasible(df, specs):
-    """Count feasible points under given constraint specs."""
-    mask = pd.Series(True, index=df.index)
-    for col, s in specs.items():
-        if np.isfinite(s["lb"]):
-            mask &= df[col] >= s["lb"]
-        if np.isfinite(s["ub"]):
-            mask &= df[col] <= s["ub"]
-    return mask.sum(), mask
-
-
 # 5a.  Relaxation: remove one constraint at a time
 print("\n--- (a) Single-constraint relaxation ---")
 print(f"  Baseline OI = {OI:.1f}%\n")
-for remove_col in active_constraints:
+relax_data = {}
+for remove_col in constraint_cols:
     specs_relaxed = {k: v for k, v in constraint_specs.items() if k != remove_col}
     n_rel, _ = count_feasible(df, specs_relaxed)
     oi_rel = 100 * n_rel / N
     gain = oi_rel - OI
-    print(f"  Remove {remove_col:<10}:  OI = {oi_rel:>5.1f}%   (Δ = +{gain:.1f}%)")
+    relax_data[remove_col] = oi_rel
+    print(f"  Remove {remove_col:<10}:  OI = {oi_rel:>5.1f}%   (Δ = +{gain:.1f} pp)")
 
 # 5b.  Tightening sweeps
 print("\n--- (b) Constraint-tightening sweeps ---")
 sweep_configs = {
-    "GVC2":     np.arange(4, 17, 0.5),
-    "GVC5":     np.arange(0.2, 5.2, 0.2),
-    "GVC5_PVR": np.arange(40, 102, 2),
+    "LPG_C2": np.arange(4, 17, 0.5),
+    "LPG_C5": np.arange(0.2, 5.2, 0.2),
+    "NG_RVP": np.arange(40, 102, 2),
 }
 sweep_results = {}
 for col, ub_range in sweep_configs.items():
@@ -291,21 +356,21 @@ for col in active_constraints:
           f"{viol_vals.max():>12.3f} {viol_vals.quantile(0.95):>12.3f}")
 
 # ============================================================
-# 6.  Optimal feasible point
+# 6.  Optimal feasible point (from LHS)
 # ============================================================
 print("\n" + "─" * 70)
 print("SECTION 5 – OPTIMAL FEASIBLE POINT")
 print("─" * 70)
 
 df_feas = df[feas_all]
-best_idx = df_feas[obj_col].idxmin()
+best_idx = df_feas[obj_col].idxmax()   # Revenue is positive now → idxmax
 best = df_feas.loc[best_idx]
 
 print(f"\n  Best feasible index: {best_idx}")
-print(f"  Sales_Price = {best[obj_col]:.4f}  (Real Price = {-best[obj_col]:.4f} $/h)\n")
+print(f"  Revenue = {best[obj_col]:.4f} $/h\n")
 print(f"  Decision variables:")
-for v in decision_vars:
-    print(f"    {v:<22} = {best[v]:>10.4f}")
+for v, u in zip(decision_vars, dv_units):
+    print(f"    {v:<14} = {best[v]:>10.4f}  {u}")
 print(f"\n  Constraint values:")
 for col, spec in constraint_specs.items():
     val = best[col]
@@ -325,10 +390,15 @@ for col, spec in constraint_specs.items():
     print(f"    {col:<12} = {val:>10.4f}   {status}   ({margin_str})")
 
 print(f"\n  Feasible region statistics:")
-print(f"    Real Price: best = {-df_feas[obj_col].min():.2f},  "
-      f"worst = {-df_feas[obj_col].max():.2f},  "
-      f"mean = {-df_feas[obj_col].mean():.2f},  "
+print(f"    Revenue: best = {df_feas[obj_col].max():.2f},  "
+      f"worst = {df_feas[obj_col].min():.2f},  "
+      f"mean = {df_feas[obj_col].mean():.2f},  "
       f"σ = {df_feas[obj_col].std():.2f} $/h")
+
+# SLSQP comparison
+print(f"\n  SLSQP optimal: Revenue = {optimal['Revenue']:.2f} $/h")
+print(f"  Improvement over best LHS: "
+      f"{100*(optimal['Revenue'] - best[obj_col])/best[obj_col]:.1f}%")
 
 # ============================================================
 # 7.  FIGURES
@@ -357,10 +427,18 @@ for _, row in df_norm[feas_all].iterrows():
     ax.plot(range(len(decision_vars)), [row[v] for v in decision_vars],
             color=C_FEAS, alpha=0.35, linewidth=0.6)
 
+# SLSQP optimal
+opt_norm = []
+for v in decision_vars:
+    vmin, vmax = df[v].min(), df[v].max()
+    opt_norm.append((optimal[v] - vmin) / (vmax - vmin) if vmax > vmin else 0.5)
+ax.plot(range(len(decision_vars)), opt_norm, color=C_ACCENT, lw=2.5,
+        marker="o", markersize=7, zorder=10, label=f"SLSQP optimal ({optimal['Revenue']:.0f} $/h)")
+
 ax.set_xticks(range(len(decision_vars)))
 ax.set_xticklabels(dv_short, fontsize=9)
 ax.set_ylabel("Normalised value  [0, 1]")
-ax.set_title("(a)  Parallel coordinates — AIS coloured by feasibility")
+ax.set_title("Parallel coordinates — AIS coloured by feasibility")
 
 # Real-value annotations
 for i, v in enumerate(decision_vars):
@@ -371,6 +449,8 @@ legend_els = [
     Line2D([0], [0], color=C_FEAS, lw=1.8, label=f"Feasible  (n = {n_feas})"),
     Line2D([0], [0], color=C_INFEAS, lw=1.8, alpha=0.45,
            label=f"Infeasible  (n = {N - n_feas})"),
+    Line2D([0], [0], color=C_ACCENT, lw=2.5, marker="o", markersize=6,
+           label=f"SLSQP optimal ({optimal['Revenue']:.0f} $/h)"),
 ]
 ax.legend(handles=legend_els, loc="upper right", framealpha=0.9)
 plt.tight_layout()
@@ -384,14 +464,14 @@ print("  ✓ Figure 1 – Parallel coordinates")
 # FIG 2 – AOS projections with DOS constraint boundaries
 # ──────────────────────────────────────────────────────────────
 pairs = [
-    ("GVC2", "GVC5_PVR"),
-    ("GVC2", "GVC5"),
-    ("GVC5", "GVC5_PVR"),
+    ("LPG_C2", "NG_RVP"),
+    ("LPG_C2", "LPG_C5"),
+    ("LPG_C5", "NG_RVP"),
 ]
 dos_limits = {
-    "GVC2":     {"val": 12, "color": "navy",    "label": "GVC2 = 12"},
-    "GVC5":     {"val":  2, "color": "navy",    "label": "GVC5 = 2"},
-    "GVC5_PVR": {"val": 76, "color": "darkred", "label": "PVR = 76"},
+    "LPG_C2": {"val": 12, "color": "navy",    "label": r"LPG\_C$_2$ = 12"},
+    "LPG_C5": {"val":  2, "color": "navy",    "label": r"LPG\_C$_5$ = 2"},
+    "NG_RVP": {"val": 76, "color": "darkred", "label": r"NG\_RVP = 76"},
 }
 
 fig, axes = plt.subplots(1, 3, figsize=(14, 4.2))
@@ -404,7 +484,10 @@ for idx, (xv, yv) in enumerate(pairs):
     ax.scatter(df.loc[feas_all, xv], df.loc[feas_all, yv],
                c=C_FEAS, alpha=0.55, s=14, edgecolors="darkgreen",
                linewidths=0.25, rasterized=True)
-    # Constraint lines — orientation depends on which axis the variable is on
+    # SLSQP optimal
+    ax.scatter(optimal[xv], optimal[yv], c=C_ACCENT, s=100, marker="*",
+               edgecolors="black", linewidths=0.8, zorder=10)
+    # Constraint lines
     if xv in dos_limits:
         dl = dos_limits[xv]
         ax.axvline(dl["val"], color=dl["color"], ls="--", lw=1.2,
@@ -413,17 +496,16 @@ for idx, (xv, yv) in enumerate(pairs):
         dl = dos_limits[yv]
         ax.axhline(dl["val"], color=dl["color"], ls="--", lw=1.2,
                    label=dl["label"], zorder=5)
-    # DOS region shading (Rectangle with data coordinates)
-    from matplotlib.patches import Rectangle as Rect
+    # DOS region shading
     if xv in dos_limits and yv in dos_limits:
         x_lim = dos_limits[xv]["val"]
         y_lim = dos_limits[yv]["val"]
-        dos_rect = Rect((0, 0), x_lim, y_lim, linewidth=0,
-                        edgecolor="none", facecolor=C_FEAS,
-                        alpha=0.08, zorder=0)
+        dos_rect = Rectangle((0, 0), x_lim, y_lim, linewidth=0,
+                              edgecolor="none", facecolor=C_FEAS,
+                              alpha=0.08, zorder=0)
         ax.add_patch(dos_rect)
-    ax.set_xlabel(xv)
-    ax.set_ylabel(yv)
+    ax.set_xlabel(xv.replace("_", r"\_"))
+    ax.set_ylabel(yv.replace("_", r"\_"))
     ax.legend(fontsize=7.5, loc="best", framealpha=0.9)
     ax.set_title(f"({chr(97+idx)})  {xv} vs {yv}")
 
@@ -458,17 +540,12 @@ ax.set_title("(a)  Individual constraint feasibility")
 
 # (b) Relaxation analysis
 ax = axes[1]
-relax_data = {}
-for rc in active_constraints:
-    specs_r = {k: v for k, v in constraint_specs.items() if k != rc}
-    n_r, _ = count_feasible(df, specs_r)
-    relax_data[rc] = 100 * n_r / N
-
-labels = list(relax_data.keys())
-vals   = [relax_data[k] for k in labels]
-colors = ["#3498db", "#9b59b6", "#e74c3c"]
-bars = ax.barh(labels, vals, color=colors, edgecolor="black", linewidth=0.5, alpha=0.85)
-for bar, v in zip(bars, vals):
+relax_labels = list(relax_data.keys())
+relax_vals = [relax_data[k] for k in relax_labels]
+colors = ["#4CAF50", "#3498db", "#9b59b6", "#e74c3c"]
+bars = ax.barh(relax_labels, relax_vals, color=colors, edgecolor="black",
+               linewidth=0.5, alpha=0.85)
+for bar, v in zip(bars, relax_vals):
     ax.text(bar.get_width() + 0.5, bar.get_y() + bar.get_height() / 2,
             f"{v:.1f}% (+{v - OI:.1f})", va="center", fontsize=8.5, fontweight="bold")
 ax.axvline(OI, color="black", ls="--", lw=1, label=f"Baseline: {OI:.1f}%")
@@ -539,13 +616,13 @@ print("  ✓ Figure 5 – DV distributions")
 
 
 # ──────────────────────────────────────────────────────────────
-# FIG 6 – Feasible region in AIS 2-D projections (colour=price)
+# FIG 6 – Feasible region in AIS 2-D projections (colour=revenue)
 # ──────────────────────────────────────────────────────────────
 proj_pairs = [
-    ("V_123102_Temp", "T_123701_Reboiler"),
-    ("V_123102_Temp", "T_123702_Reboiler"),
-    ("T_123701_Reboiler", "T_123702_Reboiler"),
-    ("T_123702_Condenser", "T_123703_Reboiler"),
+    ("V_02_Temp", "T_01_Reb"),
+    ("V_02_Temp", "T_02_Reb"),
+    ("T_01_Reb",  "T_02_Reb"),
+    ("T_02_RR",   "T_03_Reb"),
 ]
 
 fig, axes = plt.subplots(2, 2, figsize=(10, 8))
@@ -554,18 +631,21 @@ for idx, (xv, yv) in enumerate(proj_pairs):
     # Infeasible background
     ax.scatter(df.loc[~feas_all, xv], df.loc[~feas_all, yv],
                c="0.85", alpha=0.15, s=6, rasterized=True)
-    # Feasible coloured by real price
+    # Feasible coloured by revenue
     sc = ax.scatter(df.loc[feas_all, xv], df.loc[feas_all, yv],
-                    c=-df.loc[feas_all, obj_col], cmap="viridis",
+                    c=df.loc[feas_all, obj_col], cmap="viridis",
                     alpha=0.7, s=18, edgecolors="black",
                     linewidths=0.25, rasterized=True)
-    # Best point
+    # Best LHS point
     ax.scatter(best[xv], best[yv], c="none", edgecolors=C_ACCENT,
-               s=120, linewidths=2.0, marker="*", zorder=10)
-    ax.set_xlabel(xv)
-    ax.set_ylabel(yv)
+               s=120, linewidths=2.0, marker="*", zorder=10, label="Best LHS")
+    # SLSQP optimal
+    ax.scatter(optimal[xv], optimal[yv], c=C_ACCENT, s=120, marker="*",
+               edgecolors="black", linewidths=0.8, zorder=11, label="SLSQP")
+    ax.set_xlabel(dv_short[decision_vars.index(xv)])
+    ax.set_ylabel(dv_short[decision_vars.index(yv)])
     ax.set_title(f"({chr(97+idx)})")
-    plt.colorbar(sc, ax=ax, label="Real Price ($/h)", shrink=0.85)
+    plt.colorbar(sc, ax=ax, label="Revenue ($/h)", shrink=0.85)
 
 plt.suptitle("Feasible region in AIS projections  (colour = revenue)",
              fontsize=11, fontweight="bold", y=1.01)
@@ -596,37 +676,175 @@ print("  ✓ Figure 7 – Correlation heatmap")
 
 
 # ──────────────────────────────────────────────────────────────
-# FIG 8 – Key mechanistic insight: GVC5 vs GVC5_PVR trade-off
+# FIG 8 – Key mechanistic insight: LPG_C5 vs NG_RVP trade-off
+#          (full view with all points)
 # ──────────────────────────────────────────────────────────────
 fig, ax = plt.subplots(figsize=(6, 4.5))
-sc = ax.scatter(df["GVC5"], df["GVC5_PVR"], c=-df[obj_col], cmap="viridis",
+sc = ax.scatter(df["LPG_C5"], df["NG_RVP"], c=df[obj_col], cmap="viridis",
                 alpha=0.5, s=12, edgecolors="none", rasterized=True)
-ax.axvline(2, color="navy", ls="--", lw=1.2, label="GVC5 = 2")
-ax.axhline(76, color="darkred", ls="--", lw=1.2, label="PVR = 76")
-# Shade DOS region with explicit coordinates
-from matplotlib.patches import Rectangle
+ax.axvline(2, color="navy", ls="--", lw=1.2, label=r"LPG\_C$_5$ = 2")
+ax.axhline(76, color="darkred", ls="--", lw=1.2, label=r"NG\_RVP = 76")
+# Shade DOS region
 dos_rect = Rectangle((0, 0), 2, 76, linewidth=0, edgecolor="none",
                       facecolor=C_FEAS, alpha=0.10, label="DOS region",
                       zorder=0)
 ax.add_patch(dos_rect)
 # Highlight feasible
-ax.scatter(df.loc[feas_all, "GVC5"], df.loc[feas_all, "GVC5_PVR"],
+ax.scatter(df.loc[feas_all, "LPG_C5"], df.loc[feas_all, "NG_RVP"],
            c=C_FEAS, alpha=0.4, s=18, edgecolors="darkgreen",
            linewidths=0.3, label=f"Feasible (n={n_feas})", zorder=5)
-ax.set_xlabel("GVC5  (C$_5$+ content, mol%)")
-ax.set_ylabel("GVC5_PVR  (Reid vapour pressure, kPa)")
-ax.set_title("GVC5 × PVR trade-off with DOS boundary")
-plt.colorbar(sc, ax=ax, label="Real Price ($/h)", shrink=0.85)
+# SLSQP optimal
+ax.scatter(optimal["LPG_C5"], optimal["NG_RVP"], c=C_ACCENT, s=120,
+           marker="*", edgecolors="black", linewidths=0.8, zorder=10,
+           label=f"SLSQP ({optimal['Revenue']:.0f} $/h)")
+ax.set_xlabel(r"LPG\_C$_5$  (C$_{5+}$ content in LPG, mol%)")
+ax.set_ylabel(r"NG\_RVP  (Reid Vapour Pressure of NG, kPa)")
+ax.set_title(r"LPG\_C$_5$ × NG\_RVP trade-off with DOS boundary")
+plt.colorbar(sc, ax=ax, label="Revenue ($/h)", shrink=0.85)
 ax.legend(fontsize=7.5, loc="upper right", framealpha=0.9)
 plt.tight_layout()
-plt.savefig(f"{FIGDIR}/fig8_gvc5_pvr_tradeoff.png")
-plt.savefig(f"{FIGDIR}/fig8_gvc5_pvr_tradeoff.pdf")
+plt.savefig(f"{FIGDIR}/fig8_lpgc5_ngrvp_tradeoff.png")
+plt.savefig(f"{FIGDIR}/fig8_lpgc5_ngrvp_tradeoff.pdf")
 plt.close()
-print("  ✓ Figure 8 – GVC5 × PVR trade-off")
+print("  ✓ Figure 8 – LPG_C5 × NG_RVP trade-off (full)")
 
 
 # ──────────────────────────────────────────────────────────────
-# FIG 9 – Violin plots: constraint outputs (feas vs infeas)
+# FIG 8b – ZOOM: feasible region only, revenue colour scale
+#           (Roymel suggestion: comment #6)
+# ──────────────────────────────────────────────────────────────
+fig, ax = plt.subplots(figsize=(6, 4.5))
+sc = ax.scatter(df.loc[feas_all, "LPG_C5"], df.loc[feas_all, "NG_RVP"],
+                c=df.loc[feas_all, obj_col], cmap="viridis",
+                alpha=0.8, s=30, edgecolors="gray", linewidths=0.3,
+                rasterized=True)
+# SLSQP optimal
+ax.scatter(optimal["LPG_C5"], optimal["NG_RVP"], c=C_ACCENT, s=200,
+           marker="*", edgecolors="black", linewidths=0.8, zorder=10,
+           label=f"SLSQP ({optimal['Revenue']:.0f} $/h)")
+# Best LHS
+ax.scatter(best["LPG_C5"], best["NG_RVP"], c="white", s=120,
+           marker="*", edgecolors="black", linewidths=0.8, zorder=9,
+           label=f"Best LHS ({best[obj_col]:.0f} $/h)")
+# Constraint boundaries
+ax.axvline(2, color="navy", ls="--", lw=1.5, alpha=0.7, label=r"LPG\_C$_5$ = 2")
+ax.axhline(76, color="darkred", ls="--", lw=1.5, alpha=0.7, label=r"NG\_RVP = 76")
+
+plt.colorbar(sc, ax=ax, label="Revenue ($/h)", shrink=0.85)
+# Zoom to feasible region with margin
+margin_x = 0.3
+margin_y = 8
+ax.set_xlim(-margin_x, df.loc[feas_all, "LPG_C5"].max() + margin_x)
+ax.set_ylim(df.loc[feas_all, "NG_RVP"].min() - margin_y, 76 + margin_y)
+ax.set_xlabel(r"LPG\_C$_5$  (C$_{5+}$ content in LPG, mol%)")
+ax.set_ylabel(r"NG\_RVP  (Reid Vapour Pressure of NG, kPa)")
+ax.set_title("Feasible region – Revenue distribution (zoom)")
+ax.legend(fontsize=7.5, loc="lower right", framealpha=0.9)
+plt.tight_layout()
+plt.savefig(f"{FIGDIR}/fig8b_feasible_zoom.png")
+plt.savefig(f"{FIGDIR}/fig8b_feasible_zoom.pdf")
+plt.close()
+print("  ✓ Figure 8b – Feasible region zoom: LPG_C5 × NG_RVP (Roymel #6)")
+
+
+# ──────────────────────────────────────────────────────────────
+# FIG 8c – ZOOM: LPG_C2 × NG_RVP feasible region (active constraints)
+#           (Roymel request: both active constraints at SLSQP optimal)
+# ──────────────────────────────────────────────────────────────
+fig, ax = plt.subplots(figsize=(6, 4.5))
+sc = ax.scatter(df.loc[feas_all, "LPG_C2"], df.loc[feas_all, "NG_RVP"],
+                c=df.loc[feas_all, obj_col], cmap="viridis",
+                alpha=0.8, s=30, edgecolors="gray", linewidths=0.3,
+                rasterized=True)
+# SLSQP optimal
+ax.scatter(optimal["LPG_C2"], optimal["NG_RVP"], c=C_ACCENT, s=200,
+           marker="*", edgecolors="black", linewidths=0.8, zorder=10,
+           label=f"SLSQP ({optimal['Revenue']:.0f} $/h)")
+# Best LHS
+ax.scatter(best["LPG_C2"], best["NG_RVP"], c="white", s=120,
+           marker="*", edgecolors="black", linewidths=0.8, zorder=9,
+           label=f"Best LHS ({best[obj_col]:.0f} $/h)")
+# Constraint boundaries (both active at optimal)
+ax.axvline(12, color="navy", ls="--", lw=1.5, alpha=0.7, label=r"LPG\_C$_2$ = 12")
+ax.axhline(76, color="darkred", ls="--", lw=1.5, alpha=0.7, label=r"NG\_RVP = 76")
+
+plt.colorbar(sc, ax=ax, label="Revenue ($/h)", shrink=0.85)
+# Zoom to feasible region with margin
+margin_x = 1.0
+margin_y = 8
+ax.set_xlim(df.loc[feas_all, "LPG_C2"].min() - margin_x,
+            12 + margin_x)
+ax.set_ylim(df.loc[feas_all, "NG_RVP"].min() - margin_y,
+            76 + margin_y)
+ax.set_xlabel(r"LPG\_C$_2$  (Ethane in LPG, mol%)")
+ax.set_ylabel(r"NG\_RVP  (Reid Vapour Pressure of NG, kPa)")
+ax.set_title("Feasible region – Active constraints at optimal (zoom)")
+ax.legend(fontsize=7.5, loc="lower left", framealpha=0.9)
+plt.tight_layout()
+plt.savefig(f"{FIGDIR}/fig8c_feasible_zoom_active.png")
+plt.savefig(f"{FIGDIR}/fig8c_feasible_zoom_active.pdf")
+plt.close()
+print("  ✓ Figure 8c – Feasible region zoom: LPG_C2 × NG_RVP (active constraints)")
+
+
+# ──────────────────────────────────────────────────────────────
+# FIG 9 – Key correlation scatter plots (2×2)
+#          (Roymel suggestion: comment #2)
+# ──────────────────────────────────────────────────────────────
+fig, axes = plt.subplots(2, 2, figsize=(10, 8))
+
+scatter_pairs = [
+    ("V_02_Temp", "Revenue",
+     r"$u_1$: V-02 Temp. (°C)", "Revenue ($/h)"),
+    ("T_01_Reb",  "LPG_C2",
+     r"$u_2$: T-01 Reb. Temp. (°C)", r"LPG\_C$_2$ – Ethane in LPG (mol%)"),
+    ("T_02_Reb",  "NG_RVP",
+     r"$u_4$: T-02 Reb. Temp. (°C)", r"NG\_RVP – RVP of NG (kPa)"),
+    ("LPG_C5",   "NG_RVP",
+     r"LPG\_C$_5$ – C$_{5+}$ in LPG (mol%)", r"NG\_RVP – RVP of NG (kPa)"),
+]
+
+for idx, (xvar, yvar, xlabel, ylabel) in enumerate(scatter_pairs):
+    ax = axes[idx // 2][idx % 2]
+
+    ax.scatter(df.loc[~feas_all, xvar], df.loc[~feas_all, yvar],
+               c=C_INFEAS, alpha=0.08, s=6, rasterized=True, label="Infeasible")
+    ax.scatter(df.loc[feas_all, xvar], df.loc[feas_all, yvar],
+               c=C_FEAS, alpha=0.5, s=12, edgecolors="darkgreen",
+               linewidths=0.25, rasterized=True, label="Feasible")
+
+    # Regression line
+    r_val, p_val = stats.pearsonr(df[xvar], df[yvar])
+    z = np.polyfit(df[xvar], df[yvar], 1)
+    x_line = np.linspace(df[xvar].min(), df[xvar].max(), 100)
+    ax.plot(x_line, np.polyval(z, x_line), "k--", lw=1, alpha=0.6)
+
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_title(f"({chr(97+idx)})  r = {r_val:+.3f}", fontsize=10, style="italic")
+
+    # Constraint limits where relevant
+    if yvar == "LPG_C2":
+        ax.axhline(12, color="darkred", ls=":", lw=1, alpha=0.6)
+    if yvar == "NG_RVP":
+        ax.axhline(76, color="darkred", ls=":", lw=1, alpha=0.6)
+    if xvar == "LPG_C5":
+        ax.axvline(2, color="navy", ls=":", lw=1, alpha=0.6)
+
+    if idx == 0:
+        ax.legend(fontsize=7.5, markerscale=2, framealpha=0.9)
+
+plt.suptitle("Key variable correlations",
+             fontsize=11, fontweight="bold", y=1.01)
+plt.tight_layout()
+plt.savefig(f"{FIGDIR}/fig9_key_correlations.png")
+plt.savefig(f"{FIGDIR}/fig9_key_correlations.pdf")
+plt.close()
+print("  ✓ Figure 9 – Key correlation scatter plots (Roymel #2)")
+
+
+# ──────────────────────────────────────────────────────────────
+# FIG 10 – Violin plots: constraint outputs (feas vs infeas)
 # ──────────────────────────────────────────────────────────────
 fig, axes = plt.subplots(1, 3, figsize=(12, 4))
 for idx, col in enumerate(active_constraints):
@@ -666,35 +884,38 @@ for idx, col in enumerate(active_constraints):
 plt.suptitle("Constraint-output distributions by feasibility",
              fontsize=11, fontweight="bold", y=1.03)
 plt.tight_layout()
-plt.savefig(f"{FIGDIR}/fig9_violin_constraints.png")
-plt.savefig(f"{FIGDIR}/fig9_violin_constraints.pdf")
+plt.savefig(f"{FIGDIR}/fig10_violin_constraints.png")
+plt.savefig(f"{FIGDIR}/fig10_violin_constraints.pdf")
 plt.close()
-print("  ✓ Figure 9 – Violin plots")
+print("  ✓ Figure 10 – Violin plots")
 
 
 # ──────────────────────────────────────────────────────────────
-# FIG 10 – Objective (Sales Price) vs V-123102 Temp
+# FIG 11 – Revenue vs V-02 Temp (dominant input)
 # ──────────────────────────────────────────────────────────────
 fig, ax = plt.subplots(figsize=(6, 4.5))
-ax.scatter(df.loc[~feas_all, "V_123102_Temp"],
-           -df.loc[~feas_all, obj_col],
+ax.scatter(df.loc[~feas_all, "V_02_Temp"],
+           df.loc[~feas_all, obj_col],
            c=C_INFEAS, alpha=0.08, s=8, label="Infeasible", rasterized=True)
-ax.scatter(df.loc[feas_all, "V_123102_Temp"],
-           -df.loc[feas_all, obj_col],
+ax.scatter(df.loc[feas_all, "V_02_Temp"],
+           df.loc[feas_all, obj_col],
            c=C_FEAS, alpha=0.5, s=14, edgecolors="darkgreen",
            linewidths=0.25, label=f"Feasible (n={n_feas})", rasterized=True)
-ax.scatter(best["V_123102_Temp"], -best[obj_col],
-           c=C_ACCENT, s=100, marker="*", edgecolors="black",
-           linewidths=0.8, zorder=10, label="Optimal")
-ax.set_xlabel(r"$T_{\mathrm{V-123102}}$ (°C)")
-ax.set_ylabel("Real Price ($/h)")
-ax.set_title("Objective landscape vs dominant input variable")
+ax.scatter(best["V_02_Temp"], best[obj_col],
+           c="white", s=100, marker="*", edgecolors="black",
+           linewidths=0.8, zorder=10, label=f"Best LHS ({best[obj_col]:.0f} $/h)")
+ax.scatter(optimal["V_02_Temp"], optimal["Revenue"],
+           c=C_ACCENT, s=120, marker="*", edgecolors="black",
+           linewidths=0.8, zorder=11, label=f"SLSQP ({optimal['Revenue']:.0f} $/h)")
+ax.set_xlabel(r"$u_1$: V-02 Temperature (°C)")
+ax.set_ylabel("Revenue ($/h)")
+ax.set_title("Revenue landscape vs dominant input variable")
 ax.legend(fontsize=8)
 plt.tight_layout()
-plt.savefig(f"{FIGDIR}/fig10_objective_landscape.png")
-plt.savefig(f"{FIGDIR}/fig10_objective_landscape.pdf")
+plt.savefig(f"{FIGDIR}/fig11_revenue_landscape.png")
+plt.savefig(f"{FIGDIR}/fig11_revenue_landscape.pdf")
 plt.close()
-print("  ✓ Figure 10 – Objective landscape")
+print("  ✓ Figure 11 – Revenue landscape")
 
 
 # ============================================================
@@ -704,15 +925,16 @@ print("\n" + "─" * 70)
 print("EXPORTING SUMMARY TABLES …")
 print("─" * 70)
 
-# Table 1: AIS characterisation
+# Table 1: AIS characterisation (with real temperatures)
 ais_table = pd.DataFrame({
     "Variable": decision_vars,
     "Label": dv_short,
+    "Unit": dv_units,
     "Min": [df[v].min() for v in decision_vars],
     "Max": [df[v].max() for v in decision_vars],
     "Mean_Feasible": [df.loc[feas_all, v].mean() for v in decision_vars],
     "Mean_Infeasible": [df.loc[~feas_all, v].mean() for v in decision_vars],
-    "Corr_SalesPrice": [df[v].corr(df[obj_col]) for v in decision_vars],
+    "Corr_Revenue": [df[v].corr(df[obj_col]) for v in decision_vars],
 })
 ais_table.to_csv(f"{TABDIR}/table1_ais_characterisation.csv", index=False, float_format="%.4f")
 print("  ✓ table1_ais_characterisation.csv")
@@ -738,20 +960,28 @@ print("  ✓ table2_constraints.csv")
 
 # Table 3: Relaxation analysis
 rows = [{"Removed": "None (baseline)", "OI_pct": OI}]
-for rc in active_constraints:
+for rc in constraint_cols:
     specs_r = {k: v for k, v in constraint_specs.items() if k != rc}
     n_r, _ = count_feasible(df, specs_r)
     rows.append({"Removed": rc, "OI_pct": 100 * n_r / N})
 pd.DataFrame(rows).to_csv(f"{TABDIR}/table3_relaxation.csv", index=False, float_format="%.2f")
 print("  ✓ table3_relaxation.csv")
 
-# Table 4: Optimal point
+# Table 4: Best LHS point
 opt_data = {v: best[v] for v in decision_vars}
 opt_data.update({c: best[c] for c in constraint_cols})
-opt_data["Sales_Price"] = best[obj_col]
-opt_data["Real_Price"]  = -best[obj_col]
-pd.DataFrame([opt_data]).to_csv(f"{TABDIR}/table4_optimal_point.csv", index=False, float_format="%.4f")
-print("  ✓ table4_optimal_point.csv")
+opt_data["Revenue"] = best[obj_col]
+pd.DataFrame([opt_data]).to_csv(f"{TABDIR}/table4_best_lhs.csv", index=False, float_format="%.4f")
+print("  ✓ table4_best_lhs.csv")
+
+# Table 5: SLSQP optimal point
+pd.DataFrame([optimal]).to_csv(f"{TABDIR}/table5_slsqp_optimal.csv", index=False, float_format="%.4f")
+print("  ✓ table5_slsqp_optimal.csv")
+
+# Table 6: Full correlation matrix (inputs × outputs)
+corr_export = df[all_vars].corr()
+corr_export.to_csv(f"{TABDIR}/table6_correlation_matrix.csv", float_format="%.4f")
+print("  ✓ table6_correlation_matrix.csv")
 
 # ============================================================
 # 9.  Final summary
@@ -762,13 +992,17 @@ print("=" * 70)
 print(f"""
 Key findings:
   • Operability Index (OI)      = {OI:.1f}%  ({n_feas}/{N} samples feasible)
-  • Non-binding constraint      : GVC1 ≥ 80  (100% satisfied — always slack)
-  • Most restrictive constraint : GVC5_PVR ≤ 76  (48.5% feasible individually)
-  • Tightest pair               : GVC5 ∩ GVC5_PVR  (23.1% joint feasibility)
-  • GVC5 × GVC5_PVR correlation : r = −0.65  (strong inverse coupling)
-  • Dominant input variable     : V_123102_Temp  (r = 0.98 with Sales_Price)
-  • Best feasible real price    : {-best[obj_col]:.2f} $/h
+  • Non-binding constraint      : SG_C1 ≥ 80  (100% satisfied — always slack)
+  • Most restrictive constraint : NG_RVP ≤ 76  (48.5% feasible individually)
+  • Tightest pair               : LPG_C5 ∩ NG_RVP  (23.1% joint feasibility)
+  • LPG_C5 × NG_RVP correlation : r = {df['LPG_C5'].corr(df['NG_RVP']):+.3f}  (strong inverse coupling)
+  • Dominant input variable     : V_02_Temp  (r = {df['V_02_Temp'].corr(df[obj_col]):+.3f} with Revenue)
+  • Key correlations (real temperatures):
+      T_01_Reb × LPG_C2 : r = {df['T_01_Reb'].corr(df['LPG_C2']):+.3f}  (negative → physical)
+      T_02_Reb × NG_RVP  : r = {df['T_02_Reb'].corr(df['NG_RVP']):+.3f}  (negative → physical)
+  • Best feasible (LHS)         : {best[obj_col]:.2f} $/h
+  • Best feasible (SLSQP)       : {optimal['Revenue']:.2f} $/h  (+{100*(optimal['Revenue']-best[obj_col])/best[obj_col]:.1f}%)
 
-Figures saved:  {FIGDIR}/fig1–fig10  (.png + .pdf)
-Tables saved:   {TABDIR}/table1–table4  (.csv)
+Figures saved:  {FIGDIR}/fig1–fig11  (.png + .pdf)
+Tables saved:   {TABDIR}/table1–table6  (.csv)
 """)
