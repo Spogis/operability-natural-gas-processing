@@ -756,11 +756,11 @@ sc = ax.scatter(df.loc[feas_all, "LPG_C2"], df.loc[feas_all, "NG_RVP"],
 # SLSQP optimal
 ax.scatter(optimal["LPG_C2"], optimal["NG_RVP"], c=C_ACCENT, s=200,
            marker="*", edgecolors="black", linewidths=0.8, zorder=10,
-           label=f"SLSQP ({optimal['Revenue']:.0f} $/h)")
+           label=f"SLSQP ({optimal['Revenue']:.2f} $/h)")
 # Best LHS
 ax.scatter(best["LPG_C2"], best["NG_RVP"], c="white", s=120,
            marker="*", edgecolors="black", linewidths=0.8, zorder=9,
-           label=f"Best LHS ({best[obj_col]:.0f} $/h)")
+           label=f"Best LHS ({best[obj_col]:.2f} $/h)")
 # Constraint boundaries (both active at optimal)
 ax.axvline(12, color="navy", ls="--", lw=1.5, alpha=0.7, label=r"LPG_C$_2$ = 12")
 ax.axhline(76, color="darkred", ls="--", lw=1.5, alpha=0.7, label=r"NG_RVP = 76")
