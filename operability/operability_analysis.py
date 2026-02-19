@@ -150,10 +150,10 @@ obj_col = "Revenue"
 
 constraint_cols = ["SG_C1", "LPG_C2", "LPG_C5", "NG_RVP"]
 constraint_specs = {
-    "SG_C1":  {"lb": 80.0, "ub": np.inf, "label": r"$g_1$: SG\_C$_1$ $\geq$ 80"},
-    "LPG_C2": {"lb":  0.0, "ub": 12.0,   "label": r"$g_2$: LPG\_C$_2$ $\leq$ 12"},
-    "LPG_C5": {"lb":  0.0, "ub":  2.0,   "label": r"$g_3$: LPG\_C$_5$ $\leq$ 2"},
-    "NG_RVP": {"lb":  0.0, "ub": 76.0,   "label": r"$g_4$: NG\_RVP $\leq$ 76"},
+    "SG_C1":  {"lb": 80.0, "ub": np.inf, "label": r"$g_1$: SG_C$_1$ $\geq$ 80"},
+    "LPG_C2": {"lb":  0.0, "ub": 12.0,   "label": r"$g_2$: LPG_C$_2$ $\leq$ 12"},
+    "LPG_C5": {"lb":  0.0, "ub":  2.0,   "label": r"$g_3$: LPG_C$_5$ $\leq$ 2"},
+    "NG_RVP": {"lb":  0.0, "ub": 76.0,   "label": r"$g_4$: NG_RVP $\leq$ 76"},
 }
 active_constraints = ["LPG_C2", "LPG_C5", "NG_RVP"]
 
@@ -467,9 +467,9 @@ pairs = [
     ("LPG_C5", "NG_RVP"),
 ]
 dos_limits = {
-    "LPG_C2": {"val": 12, "color": "navy",    "label": r"LPG\_C$_2$ = 12"},
-    "LPG_C5": {"val":  2, "color": "navy",    "label": r"LPG\_C$_5$ = 2"},
-    "NG_RVP": {"val": 76, "color": "darkred", "label": r"NG\_RVP = 76"},
+    "LPG_C2": {"val": 12, "color": "navy",    "label": r"LPG_C$_2$ = 12"},
+    "LPG_C5": {"val":  2, "color": "navy",    "label": r"LPG_C$_5$ = 2"},
+    "NG_RVP": {"val": 76, "color": "darkred", "label": r"NG_RVP = 76"},
 }
 
 fig, axes = plt.subplots(1, 3, figsize=(14, 4.2))
@@ -502,8 +502,8 @@ for idx, (xv, yv) in enumerate(pairs):
                               edgecolor="none", facecolor=C_FEAS,
                               alpha=0.08, zorder=0)
         ax.add_patch(dos_rect)
-    ax.set_xlabel(xv.replace("_", r"\_"))
-    ax.set_ylabel(yv.replace("_", r"\_"))
+    ax.set_xlabel(xv.replace("_", r"_"))
+    ax.set_ylabel(yv.replace("_", r"_"))
     ax.legend(fontsize=7.5, loc="best", framealpha=0.9)
     ax.set_title(f"({chr(97+idx)})  {xv} vs {yv}")
 
@@ -680,8 +680,8 @@ print("  ✓ Figure 7 – Correlation heatmap")
 fig, ax = plt.subplots(figsize=(6, 4.5))
 sc = ax.scatter(df["LPG_C5"], df["NG_RVP"], c=df[obj_col], cmap="viridis",
                 alpha=0.5, s=12, edgecolors="none", rasterized=True)
-ax.axvline(2, color="navy", ls="--", lw=1.2, label=r"LPG\_C$_5$ = 2")
-ax.axhline(76, color="darkred", ls="--", lw=1.2, label=r"NG\_RVP = 76")
+ax.axvline(2, color="navy", ls="--", lw=1.2, label=r"LPG_C$_5$ = 2")
+ax.axhline(76, color="darkred", ls="--", lw=1.2, label=r"NG_RVP = 76")
 # Shade DOS region
 dos_rect = Rectangle((0, 0), 2, 76, linewidth=0, edgecolor="none",
                       facecolor=C_FEAS, alpha=0.10, label="DOS region",
@@ -695,9 +695,9 @@ ax.scatter(df.loc[feas_all, "LPG_C5"], df.loc[feas_all, "NG_RVP"],
 ax.scatter(optimal["LPG_C5"], optimal["NG_RVP"], c=C_ACCENT, s=120,
            marker="*", edgecolors="black", linewidths=0.8, zorder=10,
            label=f"SLSQP ({optimal['Revenue']:.0f} $/h)")
-ax.set_xlabel(r"LPG\_C$_5$  (C$_{5+}$ content in LPG, mol%)")
-ax.set_ylabel(r"NG\_RVP  (Reid Vapour Pressure of NG, kPa)")
-ax.set_title(r"LPG\_C$_5$ × NG\_RVP trade-off with DOS boundary")
+ax.set_xlabel(r"LPG_C$_5$  (C$_{5+}$ content in LPG, mol%)")
+ax.set_ylabel(r"NG_RVP  (Reid Vapour Pressure of NG, kPa)")
+ax.set_title(r"LPG_C$_5$ × NG_RVP trade-off with DOS boundary")
 plt.colorbar(sc, ax=ax, label="Revenue ($/h)", shrink=0.85)
 ax.legend(fontsize=7.5, loc="upper right", framealpha=0.9)
 plt.tight_layout()
@@ -724,8 +724,8 @@ ax.scatter(best["LPG_C5"], best["NG_RVP"], c="white", s=120,
            marker="*", edgecolors="black", linewidths=0.8, zorder=9,
            label=f"Best LHS ({best[obj_col]:.0f} $/h)")
 # Constraint boundaries
-ax.axvline(2, color="navy", ls="--", lw=1.5, alpha=0.7, label=r"LPG\_C$_5$ = 2")
-ax.axhline(76, color="darkred", ls="--", lw=1.5, alpha=0.7, label=r"NG\_RVP = 76")
+ax.axvline(2, color="navy", ls="--", lw=1.5, alpha=0.7, label=r"LPG_C$_5$ = 2")
+ax.axhline(76, color="darkred", ls="--", lw=1.5, alpha=0.7, label=r"NG_RVP = 76")
 
 plt.colorbar(sc, ax=ax, label="Revenue ($/h)", shrink=0.85)
 # Zoom to feasible region with margin
@@ -733,8 +733,8 @@ margin_x = 0.3
 margin_y = 8
 ax.set_xlim(-margin_x, df.loc[feas_all, "LPG_C5"].max() + margin_x)
 ax.set_ylim(df.loc[feas_all, "NG_RVP"].min() - margin_y, 76 + margin_y)
-ax.set_xlabel(r"LPG\_C$_5$  (C$_{5+}$ content in LPG, mol%)")
-ax.set_ylabel(r"NG\_RVP  (Reid Vapour Pressure of NG, kPa)")
+ax.set_xlabel(r"LPG_C$_5$  (C$_{5+}$ content in LPG, mol%)")
+ax.set_ylabel(r"NG_RVP  (Reid Vapour Pressure of NG, kPa)")
 ax.set_title("Feasible region – Revenue distribution (zoom)")
 ax.legend(fontsize=7.5, loc="lower right", framealpha=0.9)
 plt.tight_layout()
@@ -762,8 +762,8 @@ ax.scatter(best["LPG_C2"], best["NG_RVP"], c="white", s=120,
            marker="*", edgecolors="black", linewidths=0.8, zorder=9,
            label=f"Best LHS ({best[obj_col]:.0f} $/h)")
 # Constraint boundaries (both active at optimal)
-ax.axvline(12, color="navy", ls="--", lw=1.5, alpha=0.7, label=r"LPG\_C$_2$ = 12")
-ax.axhline(76, color="darkred", ls="--", lw=1.5, alpha=0.7, label=r"NG\_RVP = 76")
+ax.axvline(12, color="navy", ls="--", lw=1.5, alpha=0.7, label=r"LPG_C$_2$ = 12")
+ax.axhline(76, color="darkred", ls="--", lw=1.5, alpha=0.7, label=r"NG_RVP = 76")
 
 plt.colorbar(sc, ax=ax, label="Revenue ($/h)", shrink=0.85)
 # Zoom to feasible region with margin
@@ -773,8 +773,8 @@ ax.set_xlim(df.loc[feas_all, "LPG_C2"].min() - margin_x,
             12 + margin_x)
 ax.set_ylim(df.loc[feas_all, "NG_RVP"].min() - margin_y,
             76 + margin_y)
-ax.set_xlabel(r"LPG\_C$_2$  (Ethane in LPG, mol%)")
-ax.set_ylabel(r"NG\_RVP  (Reid Vapour Pressure of NG, kPa)")
+ax.set_xlabel(r"LPG_C$_2$  (Ethane in LPG, mol%)")
+ax.set_ylabel(r"NG_RVP  (Reid Vapour Pressure of NG, kPa)")
 ax.set_title("Feasible region – Active constraints at optimal (zoom)")
 ax.legend(fontsize=7.5, loc="lower left", framealpha=0.9)
 plt.tight_layout()
@@ -793,11 +793,11 @@ scatter_pairs = [
     ("V_02_Temp", "Revenue",
      r"$u_1$: V-02 Temp. (°C)", "Revenue ($/h)"),
     ("T_01_Reb",  "LPG_C2",
-     r"$u_2$: T-01 Reb. Temp. (°C)", r"LPG\_C$_2$ – Ethane in LPG (mol%)"),
+     r"$u_2$: T-01 Reb. Temp. (°C)", r"LPG_C$_2$ – Ethane in LPG (mol%)"),
     ("T_02_Reb",  "NG_RVP",
-     r"$u_4$: T-02 Reb. Temp. (°C)", r"NG\_RVP – RVP of NG (kPa)"),
+     r"$u_4$: T-02 Reb. Temp. (°C)", r"NG_RVP – RVP of NG (kPa)"),
     ("LPG_C5",   "NG_RVP",
-     r"LPG\_C$_5$ – C$_{5+}$ in LPG (mol%)", r"NG\_RVP – RVP of NG (kPa)"),
+     r"LPG_C$_5$ – C$_{5+}$ in LPG (mol%)", r"NG_RVP – RVP of NG (kPa)"),
 ]
 
 for idx, (xvar, yvar, xlabel, ylabel) in enumerate(scatter_pairs):
