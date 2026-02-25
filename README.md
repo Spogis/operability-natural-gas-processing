@@ -15,6 +15,12 @@
 
 ## 📋 Overview
 
+<div align="center">
+
+![Graphical Abstract](operability/graphical_abstract/graphical_abstract_1328x531.png)
+
+</div>
+
 This repository contains the simulation model, datasets, and analysis scripts for the operability analysis of a multi-column natural gas processing plant. The study applies the **Georgakis process operability framework** to quantify the feasible operating envelope under Brazilian regulatory constraints (ANP Resolutions 16/2008 and 825/2020).
 
 The work was submitted to *Computers and Chemical Engineering* (Manuscript CACE-D-26-00317).
