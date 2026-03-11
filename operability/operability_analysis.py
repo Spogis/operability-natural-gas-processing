@@ -106,26 +106,26 @@ print(f"\nDataset loaded: {N} LHS samples, {df.shape[1]} columns")
 
 df = df.rename(columns={
     # Real stage temperatures → paper decision variables
-    "T_123701_Stage11_Temperature": "T_01_Reb",   # Deethaniser bottom (11 stages)
-    "T_123702_Stage21_Temperature": "T_02_Reb",   # Debutanizer bottom (21 stages)
-    "T_123703_Stage6_Temperature":  "T_03_Reb",   # Stabilizer bottom  (6 stages)
+    "T_01_Stage11_Temperature": "T_01_Reb",   # Deethaniser bottom (11 stages)
+    "T_02_Stage21_Temperature": "T_02_Reb",   # Debutanizer bottom (21 stages)
+    "T_03_Stage6_Temperature":  "T_03_Reb",   # Stabilizer bottom  (6 stages)
     # Cold separator stays the same (already a temperature)
-    "V_123102_Temp": "V_02_Temp",
+    "V_02_Temp": "V_02_Temp",
     # Reflux ratio (NOT a temperature — dimensionless)
-    "T_123702_Condenser": "T_02_RR",
+    "T_02_Condenser": "T_02_RR",
     # Top temperatures (kept for reference, not used as DVs)
-    "T_123701_Stage1_Temperature": "T_01_Top",
-    "T_123702_Stage1_Temperature": "T_02_Top",
-    "T_123703_Stage1_Temperature": "T_03_Top",
+    "T_01_Stage1_Temperature": "T_01_Top",
+    "T_02_Stage1_Temperature": "T_02_Top",
+    "T_03_Stage1_Temperature": "T_03_Top",
     # Outputs → paper names
-    "GVC1":     "SG_C1",
-    "GVC2":     "LPG_C2",
-    "GVC5":     "LPG_C5",
-    "GVC5_PVR": "NG_RVP",
+    "SG_C1":     "SG_C1",
+    "LPG_C2":     "LPG_C2",
+    "LPG_C5":     "LPG_C5",
+    "NG_RVP": "NG_RVP",
 })
 
 # Revenue: stored as negative cost in Sales_Price → convert to positive
-df["Revenue"] = df["Sales_Price"].abs()
+df["Revenue"] = df["Revenue"].abs()
 
 # ── Column mapping ───────────────────────────────────────────
 # Decision variables for the paper (real temperatures + reflux ratio)
